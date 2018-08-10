@@ -91,68 +91,76 @@ __config  _INTOSC_OSC_NOCLKOUT & _LVP_OFF & _WDT_OFF & _PWRTE_ON & _BODEN_OFF & 
 ;
 ;*******************************************************************************
 
-RB0 EQU 0
-RB3 EQU 3
-RB4 EQU 4
-RB5 EQU 5
-
+; make PORTA and PORTB pins more readable
+RA0 EQU 0 
+RA1 EQU 1 
+RA2 EQU 2 
+RA3 EQU 3 
 RA4 EQU 4
 RA5 EQU 5
 RA6 EQU 6
+RA7 EQU 7    
+    
+RB0 EQU 0
+RB1 EQU 1
+RB2 EQU 2
+RB3 EQU 3
+RB4 EQU 4
+RB5 EQU 5
+RB6 EQU 6
+RB7 EQU 7
 
+; other staff
 CCP1 EQU RB3
-
-IncMinutes EQU 0
 
 FALSE	EQU 0
 TRUE	EQU 1
+	
 
-Debug   EQU FALSE           ; A Debugging Flag
-
-      cblock 0x20 ; (max 80 Bytes)
-		Delay1
-		Delay2
-		dataL
-
-
-
-		; Для облегчения вывода через дешифратор введём переменные, отображающие текущее значение дешифратора
-;		HOURS_DEC		; часы - десятки | 0000 to 0010
-;		HOURS_UNIT		; часы - единицы | 0000 to 1001
-
-;		MINUTES_DEC		; минуты - десятки | 0000 to 0101
-;		MINUTES_UNIT	; минуты - единицы | 0000 to 1001
+NIXIE_ZERO equ b'00000110'
+NIXIE_NINE equ b'00001111'
+	
+	
+; Trying to be as clear as possible about port connection
+; Still not sure it is a good idea
+; all K155ID1 address lines connected to PORTA
+K155ID1_A0_on_pA equ RA3	
+K155ID1_A1_on_pA equ RA4
+K155ID1_A2_on_pA equ RA6
+K155ID1_A3_on_pA equ RA7
  
-;		SECONDS_DEC		; секунды - десятки | 0000 to 0101
-;		SECONDS_UNIT	; секунды - единицы | 0000 to 1001
-;
-;		HOURS
-;		MINUTES
-;		SECONDS
+; 74LS138 address lines are both on PORTA and PORTB
+; need to be carefull
+_74LS138_A0_on_pA equ RA2
+_74LS138_A1_on_pB equ RB5
+_74LS138_A2_on_pB equ RB4 
+	
+Debug EQU FALSE       ; A Debugging Flag
 
-		SECONDS_BCD
-		MINUTES_BCD
-		HOURS_BCD
+cblock 0x20		; (max 80 Bytes)
+    Delay1
+    Delay2
+    dataL
 
-;		STATUS_TIME
+    SECONDS_BCD		; Storing seconds for display on NIXIE ()
+    MINUTES_BCD
+    HOURS_BCD
 
-		PORTA_TMP		; значения PORTA для сохранения состояний выходов, не задействованных при динамической индикации
-		IND_TMP			; испольуем при динамической индикации
-		IND_STATUS		; дополнительные флаги для динамической индикации
-
-		;
-		;  +------+-------+-------+-----------+-------+-------+----------+---------+
-		;  |    |  ---  |  ---  |  |  ---  |  ---  |  | |
-		;  +------+-------+-------+-----------+-------+-------+----------+---------+
-		;
-
-     endc
+    PORTA_TMP		; Used to save PORTA value
+    VAL_FOR_INDICATION	; This reg stores value of seconds, minutes or houres
+			; which is to be shown on tubes
+    PORTB_TMP	; This is tmp reg for PORTB set up during dynamic indication
+    
+    INDICATION_TMP1	; temporary register to hold PORTA output bits
+    INDICATION_TMP2	;
+    
+    endc
      
 
-     cblock 0x70     ; put these up in unbanked RAM (max 16 Bytes)
+    cblock 0x70     ; put these up in unbanked RAM (max 16 Bytes)
 		W_Save
 		STATUS_Save
-     endc
+    endc
    
 ;*******************************************************************************
 ; Reset Vector
@@ -189,360 +197,378 @@ RES_VECT  CODE    0x0000            ; processor reset vector
 ISR       CODE    0x0004
     	
        
-	movwf     W_Save              ; Save context
-	movf      STATUS,w
-	movwf     STATUS_Save
+    movwf     W_Save              ; Save context
+    movf      STATUS,w
+    movwf     STATUS_Save
 
-	bcf 	STATUS,RP0       ; select Register Page 0
+    bcf	    STATUS,RP0       ; select Register Page 0
 
-        if ( Debug )
-            bsf     PORTB, 0            ; Set high, use to measure total
-        endif                           ;     time in Int Service Routine
+    if ( Debug )
+	bsf     PORTA, 0            ; Set high, use to measure total
+    endif                           ;     time in Int Service Routine
 
-;; отлавдка: помигать светодиодом
-;	btfss PORTB,RB0
-;	goto setBit
 
-;	bcf PORTB,RB0 
- ;   goto stepNextInt    
-;setBit:
-;	bsf PORTB,RB0   
-;stepNextInt:
-;; помигали
-
-;обработка переполнения таймера 1 - прошла секунда
-	btfsc     PIR1,TMR1IF           ; Check Timer 1 
-	goto      ServiceTimer1
-	goto      ExitISR
+    ; Select Interrupt to process
+    btfsc     PIR1,TMR1IF           ; Check Timer 1 - one more second to go
+    goto      ServiceTimer1
+    
+    goto      ExitISR
 
 ServiceTimer1:
-	bcf       PIR1,TMR1IF         ; clear the interrupt flag. (must be done in software)
+    bcf       PIR1,TMR1IF         ; clear the interrupt flag. (must be done in software)
 
-	MOVLW 0x80
-	MOVWF TMR1H ; 1 Second Overflow
-	clrf  TMR1L
+    MOVLW 0x80
+    MOVWF TMR1H ; 1 Second Overflow
+    clrf  TMR1L
 
-	; модификация переменных, хранителей времени
+    ; Count NIXIE TIME
+    ; Look at the seconds/minutes coding
+    
+    ;|--------|--------|
+    ;|  0000  |  0110  | 0 sec.
+    ;|  0000  |  0111  | 1 sec.
+    ;|  0000  |  1000  | 2 sec.
+    ;|  0000  |  1001  | 3 sec.
+    ;.................
+    ;|  0000  |  1111  | 9 sec.
+    
+    ;|  0001  |  0000  | 10 sec.
+    ;..................
+    ;|  0101  |  1111  | 59 sec.
+    
+    ;|  0110  |  0000  | 60 sec. after common increment, but we have 0 as 0110
+    ;  in lower nibble so our 60 seconds should look like this: 
+    ;|  0110  |  0110  | 
+   
+    ; it makes incremet working correctly
+    ; but also means we have to substitute 0110 every time to get correct
+    ; value to make it possible to display lower nibble digit correctly
+    
+    incf SECONDS_BCD, F 		; add one more second to NIXIE TIME
 
- 
-	; модификация переменных, хранителей времени
+    movlw NIXIE_NINE			; 
+    andwf SECONDS_BCD, W
 
-	incf SECONDS_BCD, F 		; увеличим секунды на единицу
+    btfss STATUS, Z			; if we've got 0001 0000 in  SECONDS_BCD then we need to zero (xxxx 0110)
+    goto SECONDS_CHECK			; last NIXIE digit and add one to decade
 
-	movlw b'00001111'			; сброс в ноль при достижении 9 - аналогично добавить для минут и часов 
-	andwf SECONDS_BCD, W
-
-	btfss STATUS, Z
-	goto SECONDS_CHECK
-
-	movlw b'00000110'      
-	iorwf SECONDS_BCD, F	
+    movlw NIXIE_ZERO     
+    iorwf SECONDS_BCD, F	
 
 SECONDS_CHECK
 
-	movlw b'01100110'
-	subwf SECONDS_BCD, W
+    movlw b'01100110'			; this is how 60 looks like in this system. 
+    subwf SECONDS_BCD, W
 	
-	btfss STATUS, Z				;если секунды дошли до 60 то необходимо модифицировать минуты 
-	goto ExitISR
+    btfss STATUS, Z			; if we got 60 seconds, add one minute and clear seconds to zero (00000110)
+    goto ExitISR
 
-	movlw b'00000110'			; сбросим секунды в НОЛЬ
-	movwf SECONDS_BCD 		
+    movlw NIXIE_ZERO			; move 0110 to lower nibble. 00 seconds it is
+    movwf SECONDS_BCD 		
 
-	incf MINUTES_BCD, F
+    incf MINUTES_BCD, F
 
-	movlw b'00001111'			; сброс в ноль при достижении 9 - аналогично добавить для минут и часов 
-	andwf MINUTES_BCD, W
+    movlw NIXIE_NINE			; reached 9 and have to zero lower nibble
+    andwf MINUTES_BCD, W
 
-	btfss STATUS, Z
-	goto MINUTES_CHECK
+    btfss STATUS, Z
+    goto MINUTES_CHECK
 
-	movlw b'00000110'      
-	iorwf MINUTES_BCD, F	
+    movlw NIXIE_ZERO     
+    iorwf MINUTES_BCD, F	
 
 MINUTES_CHECK
 
+    ; add alarm somewhere here
 
-	; тут должна быть проверка будильника
+    movlw b'01100110'
+    subwf MINUTES_BCD, W
 
+    btfss STATUS, Z			; if we got 60 minutes, add one minute and clear seconds to zero (00000110)
+    goto ExitISR
 
-	movlw b'01100110'
-	subwf MINUTES_BCD, W
+    movlw NIXIE_ZERO			; move 0110 to lower nibble. 00 minutes it is
+    movwf MINUTES_BCD 		
 
-	btfss STATUS, Z				;если минуты дошли до 60 то необходимо модифицировать часы 
-	goto ExitISR
+    incf HOURS_BCD, F
 
-	movlw b'00000110'			; сбросим минуты в НОЛЬ
-	movwf MINUTES_BCD 		
+    movlw NIXIE_NINE			; reached 9 and have to zero lower nibble
+    andwf HOURS_BCD, W
 
-	incf HOURS_BCD, F
+    btfss STATUS, Z
+    goto HOURS_CHECK
 
-	movlw b'00001111'			; сброс в ноль при достижении 9 - аналогично добавить для минут и часов 
-	andwf HOURS_BCD, W
-
-	btfss STATUS, Z
-	goto HOURS_CHECK
-
-	movlw b'00000110'      
-	iorwf HOURS_BCD, F
+    movlw NIXIE_ZERO   
+    iorwf HOURS_BCD, F
 
 HOURS_CHECK
-	movlw b'00101010'
-	subwf HOURS_BCD, W
+    movlw b'00101010'
+    subwf HOURS_BCD, W
 	
-	btfss STATUS, Z				;если часы дошли до 24 то необходимо модифицировать часы 
-	goto ExitISR
+    btfss STATUS, Z			; we reached 24 houres, so time to 00:00:00
+    goto ExitISR
 
-	movlw b'00000110'			; сбросим часы в НОЛЬ
-	movwf HOURS_BCD	
+    movlw NIXIE_ZERO			; 
+    movwf HOURS_BCD	
 
 
-ExitISR:
-	movf      STATUS_Save,w       ; Restore context
-	movwf     STATUS
-	swapf     W_Save,f            ; swapf doesn't affect Status bits, but MOVF would
-	swapf     W_Save,w
+ExitISR
+    movf      STATUS_Save,w       ; Restore context
+    movwf     STATUS
+    swapf     W_Save,f            ; swapf doesn't affect Status bits, but MOVF would
+    swapf     W_Save,w
 
-        if ( Debug )
-            bcf     PORTB, 0            ; Set high, use to measure total
-        endif  
+    if ( Debug )
+    bcf     PORTB, 0            ; Set high, use to measure total
+    endif  
 
-	retfie
-
- ; 
+    retfie
 
 
 MAIN_PROGRAM:
 ; ------------------------------------ 
-; SETUP PORTS
+; PORTS SETUP
 ; ------------------------------------ 
-; 
-; 
-	movlw 7 
-	movwf CMCON             ; CMCON=7 set comperators off 
 
-	clrf PORTA
-	clrf PORTB
+    movlw 7 
+    movwf CMCON             ; CMCON=7 set comperators off 
 
-	bsf STATUS,RP0       ; select Register Page 1
+    clrf PORTA
+    clrf PORTB
 
-	movlw b'00110000' 
-	movwf TRISA             ; portA pins RA4 and RA5 inputs, all the others are output 
+    bsf STATUS,RP0	    ; select Register Page 1
 
-	movlw b'11000010'       ; RB7-RB6 and RB1(RX)=input, others output 
-	movwf TRISB 
+    movlw b'00100010' 
+    movwf TRISA             ; portA pins RA1 and RA5 are inputs, all the others are output 
 
+    movlw b'11000010'       ; RB7-RB6(RTC crystal), RB1(RX) and RB0(INT for PWM control) =input, others output 
+    movwf TRISB 
 
 
 
 ; ------------------------------------ 
-; TIMER1
+; TIMER1 and interrupts SETUP
 ; ------------------------------------ 
 ; 
 ; 	
 
-		bsf STATUS,RP0          ; select Register Page 1
+    bsf STATUS,RP0		; select Register Page 1
 
-		bsf PIE1, TMR1IE		; TMR1 overflow interrupt
+    bsf PIE1, TMR1IE		; TMR1 overflow interrupt
 
- 		bcf STATUS,RP0          ; select Register Page 0
+    bcf STATUS,RP0		; select Register Page 0
 
-		CLRF PIR1
+    CLRF PIR1
 
-		movlw b'00001110' 		; prescaler 1:1; OSC is on; Asynchonous input; Source - external clock; Timer is off
-		movwf T1CON
+    movlw b'00001110' 		; prescaler 1:1; OSC is on; Asynchonous input; Source - external clock; Timer is off
+    movwf T1CON
 
-		bsf INTCON, PEIE
-		BSF INTCON, GIE 		; Enable all Interrupts
+    bsf INTCON, PEIE
+    bsf INTCON, GIE 		; Enable all Interrupts
 
-		MOVLW 0x80
-		MOVWF TMR1H 			; 1 Second Overflow
-		clrf  TMR1L				; очистка регистров значения Timer1
+    movlw 0x80
+    movwf TMR1H 		; 1 Second Overflow
+    clrf  TMR1L			; clear to start again
 
- 		BSF T1CON, TMR1ON 		; Turn Timer 1 ON
+    BSF T1CON, TMR1ON 		; Turn Timer 1 ON
 
 
-;===============================
-; 			Первичная инициализация переменных 
-;===============================
+;===============================================================================
+; Initial time to display - 0:00:00
+;===============================================================================
 ;
-		movlw b'00000110'		; заданная кодировка НУЛЯ в значениях!
-		movwf SECONDS_BCD		; НОЛЬ секунд
-		movwf MINUTES_BCD		; НОЛЬ минут
-		movwf HOURS_BCD			; НОЛЬ часов
+    movlw NIXIE_ZERO		; To tell 74LS138 to display ZERO on NIXIE use NIXIE_ZERO
+    movwf SECONDS_BCD		; NIXIE - ZERO seconds
+    movwf MINUTES_BCD		; NIXIE - ZERO minutes
+    movwf HOURS_BCD		; NIXIE - ZERO hours
+    
+    clrf PORTB_TMP
 
-		clrf IND_STATUS
-
-;===============================
-; 			Основной цикл												
-;===============================
+;===============================================================================
+; Main loop 
+; infinite loop to serve indication on tubes
+;===============================================================================
 ; 
-
-		;call message
 
 MAIN_LOOP:  
        
+    ; SECONDS 
+    movf SECONDS_BCD, w			; select seconds data for subroutine
+    movwf VAL_FOR_INDICATION		; move it into tmp reg to use inside subroutine
+
+    ; set demultiplexor 
+    bsf PORTB_TMP, _74LS138_A2_on_pB	
+    bcf PORTB_TMP, _74LS138_A1_on_pB
+
+    call TIME_INDICATION		; show seconds on tubes
+
+    call WASTE_TIME_DYNAMICALLY		; need some time before turning nex tube on
+
+    ; MINUTES 
+    movf MINUTES_BCD, W			; select minutes data for subroutine
+    movwf VAL_FOR_INDICATION		; move it into tmp reg to use inside subroutine
+
+    ; set demultiplexor 
+    bcf PORTB_TMP, _74LS138_A2_on_pB	
+    bsf PORTB_TMP, _74LS138_A1_on_pB
+		
+    call TIME_INDICATION		; show minutes on tubes
+
+    call WASTE_TIME_DYNAMICALLY		; need some time before turning nex tube on
+
+    ; HOURS
+    movf HOURS_BCD, W			; select houres data for subroutine
+    movwf VAL_FOR_INDICATION		; move it into tmp reg to use inside subroutine
+
+    ; set demultiplexor 
+    bcf PORTB_TMP, _74LS138_A2_on_pB	; 
+    bcf PORTB_TMP, _74LS138_A1_on_pB
+		
+    call TIME_INDICATION		; show houres on tubes
+		
+    call WASTE_TIME_DYNAMICALLY		; need some time before turning next tubes on
+
+    goto MAIN_LOOP 
+
+    
+;===============================================================================
+; Subroutine to show either houres, minutes or seconds
+;===============================================================================
+TIME_INDICATION:
 
 
+    movlw NIXIE_ZERO		
+				
+    subwf VAL_FOR_INDICATION, F		; get coorect values for indication
+
+    clrf PORTA_TMP
+    bsf PORTA_TMP, _74LS138_A0_on_pA	; lower nibble first
+
+showDozensOnSecondPass
+
+    movf PORTA, W			; preserve some PORTA bits from changing
+    andlw b'00100011'			; RA0 RA1 RA5
+    iorwf PORTA_TMP, F			; 
 	
-
-
-		; SECONDS 
-		movf SECONDS_BCD, w
-
-		movwf IND_TMP			; тут будет текущее значение для дешифрации фесятков и единиц - задаётся до подпрограммы
-
-		bsf IND_STATUS, RB4		; 
-		bcf IND_STATUS, RB5
-
-		call TIME_INDICATION
-
-		call DELAY_1dot5_MS		; выводим задержку между отображением секунд и минут. можно заменить на любые инструкции нужной продолжительности
-
-		; MINUTES 
-		movf MINUTES_BCD, W
-
-		movwf IND_TMP			; тут будет текущее значение для дешифрации фесятков и единиц - задаётся до подпрограммы
-
-		bcf IND_STATUS, RB4		; 
-		bsf IND_STATUS, RB5
+    
+    ;btfsc PORTA_TMP, _74LS138_A0_on_pA	; если бит PORTA_TMP выставлен, то организуем вывод единиц. так как вывод производится 
+    swapf VAL_FOR_INDICATION, F		; из старшего разряда, то необходимо обменять полубайты
+					;для вывода десятков обмен полубайтов не производим
 		
-		call TIME_INDICATION
+    ; get PORTA output bits for 155ID1 (schematics Rev.3)
+    ; it is connected on RA3 RA4 RA6 RA7, PORTA mask is 11011000
+    movf VAL_FOR_INDICATION, W
+    
+    andlw b'00110000'			; need to get this bits from upper nibble and rotate tem left
+    
+    movwf INDICATION_TMP1
+    rrf INDICATION_TMP1, F		; mask is 00011000
+        
+    movf VAL_FOR_INDICATION, W
+    andlw b'11000000'			; 
+        
+    iorwf INDICATION_TMP1, W		; mask is 11011000
+    
+    ; Now get output bits fot 155ID1 in PORTA
+    iorwf PORTA_TMP, F			; 
 
-		call DELAY_1dot5_MS		; выводим задержку между отображением секунд и минут. можно заменить на любые инструкции нужной продолжительности
-
-		; HOURS
-		movf HOURS_BCD, W
-
-		movwf IND_TMP			; тут будет текущее значение для дешифрации фесятков и единиц - задаётся до подпрограммы
-		bcf IND_STATUS, RB4		; 
-		bcf IND_STATUS, RB5
+    
+    ; Now get PORTB bits 
+    
+    ; 74LS138 has 000 or 001 on A2 A1 A0 inputs respectfully
+    ; so PORTB look like xx00xxxx in this case
+    movf PORTB_TMP, W			; 
+    
+    ;Checking weather we work with houres 
+    andlw b'00110000'			; mask for Houres to show on tubes
 		
-		call TIME_INDICATION
+    btfss STATUS, Z			; if Z=1 then we should check if decades of houres should be displayed
+    goto Set_PORTx_for_DISPLAY
+
+    btfsc PORTA_TMP, _74LS138_A0_on_pA	; (RA2) = 0 decades of houres should be displayed. 
+    goto Set_PORTx_for_DISPLAY
 		
-		call DELAY_1dot5_MS		; выводим задержку между отображением секунд и минут. можно заменить на любые инструкции нужной продолжительности
+    movwf INDICATION_TMP1 		; save data for PORTB from W
+        
+    ; 00 houres is 00000110
+    ; but we shoul show only 0, so upper nibble is skipped in this case
+    movf PORTA_TMP, W			; 
+    andlw b'11011000'			; 
 
-		goto MAIN_LOOP 
+    btfsc STATUS, Z			; Z = 1 means we have no zero in houres decades which is not to be shown on tube
+    goto END_TIME_INDICATION
 
-;===============================
-; подпрограмма вывода единиц и десятков одной группы единиц измерения														
-;===============================
-TIME_INDICATION
-
-
-		movlw b'00000110'		; заданная кодировка НУЛЯ в младших полубайтах значений! 
-		subwf IND_TMP, F		; её будем вычитать для получения правильного значения на дешифатор ИД1
-
-		clrf PORTA_TMP
-		bsf PORTA_TMP, RA6		; первая итерация с выставленным битом
-
-dozensIndLoop
-
-		movf PORTA, W			; заберем текущее состояние выходов PORTA
-		andlw b'10110000'		; выделим биты, которые необходимо сохранить нетронутыми
-		iorwf PORTA_TMP, F		; запомним неизменяемые биты из PORTA и бит RA6
-	
-		btfss PORTA_TMP, RA6	; если бит PORTA_TMP сброшен, то это вторая итерация цикла, и единицы уже выводились
-		swapf IND_TMP, F		; значит необходимо получить значение для дешифрации десятков
-		
-
-		movf IND_TMP, W			; выделим значения для ИД1
-		andlw b'00001111'
-
-		iorwf PORTA_TMP, F		; внесем новые значения ИД1 в PORTA
-
-		movf IND_STATUS, W		; выбрали между секундами минутами или часами
-		andlw b'00110000'
-		
-		btfss STATUS, Z			; если операция И дала 0 значит выводим часы и необходимо проверить, не выводим ли 0 в десятках
-		goto modifyPORTB
-
-		btfsc PORTA_TMP, RA6	; RA6 = 0 значит должны выводить десятки часов, нужны доп. проверки
-		goto modifyPORTB
-		
-		movwf IND_TMP 		; нужно сохранить данные для вывода PORTB иначе затрём Z
-
-	; тут проверить на вывод 0 в десятках часов
-		movf PORTA_TMP, W
-		andlw b'00001111'
-
-		btfsc STATUS, Z		; Z = 1 значит не выводим десятки часов
-		goto END_TIME_INDICATION
-
-		movf IND_TMP, W		; вернём значение для модификации PORTB
+    movf INDICATION_TMP1, W		; move PORTB bits data back to W
 
 
+Set_PORTx_for_DISPLAY
 
-modifyPORTB
+    ; W contains bits for PORTB
+    bcf PORTB, _74LS138_A2_on_pB	; set PORTB to demultiplexor outputs
+    bcf PORTB, _74LS138_A1_on_pB	; 
+    iorwf PORTB, F
 
+    movf PORTA_TMP, W			; Set PORTA outputs
+    movwf PORTA				; 
 
-		bcf PORTB, RB4			; ИЛИ может выдать не тот разряд, что нужен для идикации
-		bcf PORTB, RB5			; поэтому перед ИЛИ очистим оба нужных бита и получим достоверный
-		iorwf PORTB, F
+    clrf PORTA_TMP			; 
 
-		movf PORTA_TMP, W		; подготовимся к выводу
-		movwf PORTA				; подлностью вывели новое значение
+    btfss PORTA, _74LS138_A0_on_pA	; if set then go to display decades on tube
+    goto END_TIME_INDICATION
 
-		clrf PORTA_TMP			; сбросим RA6 для второй итерации и очистим прочие биты для чистоты эксперимента
-		;bcf PORTA_TMP, RA6		; первая итерация окончена, единицы вывели
-
-
-
-		btfss PORTA, RA6		; если бит выставлен, значит выводис десятки
-		goto END_TIME_INDICATION
-
-		call DELAY_1dot5_MS		; выводим задержку только внутри между десятками и единицами
-		goto dozensIndLoop
+    call WASTE_TIME_DYNAMICALLY		; need some time before turning next tubes on
+    goto showDozensOnSecondPass
 
 END_TIME_INDICATION		
-		return
+    return
 		
 
-; *******************************************************************
-; *							Подпрограммы
-; *******************************************************************
+;===============================================================================
+; * Delays and other subroutines
+;===============================================================================
 
-
-
-; ============================
-; задержки
-; ============================
-
+    
 ;---
-; приблизительно 197 мс
+; approximately 197 ms
 ;-----
 
-DELAY_197_MS
+DELAY_197_MS:
 
-     decfsz    Delay1,f       ; Waste time.  
-     goto      DELAY_197_MS    ; The Inner loop takes 3 instructions per loop * 256 loopss = 768 instructions
-     decfsz    Delay2,f       ; The outer loop takes and additional 3 instructions per lap * 256 loops
-     goto      DELAY_197_MS    ; (768+3) * 256 = 197376 instructions / 1M instructions per second = 0.197 sec.
+    decfsz    Delay1,f       ; Waste time.  
+    goto      DELAY_197_MS    ; The Inner loop takes 3 instructions per loop * 256 loopss = 768 instructions
+    decfsz    Delay2,f       ; The outer loop takes and additional 3 instructions per lap * 256 loops
+    goto      DELAY_197_MS    ; (768+3) * 256 = 197376 instructions / 1M instructions per second = 0.197 sec.
                               ; call it two-tenths of a second.
 
-	return
+    return
 
 
 
 ;---
-; приблизительно 1.5 мс
+; approximately 1.5 ms
 ;-----
 
-DELAY_1dot5_MS		;
-
-	movlw 0x05
-	movwf Delay2
+WASTE_TIME_DYNAMICALLY:		;
+    
+    ; Not good to waste time, we have 1.5 ms so
+    
+    ; Good idea to add USART buffers check here. 
+    ; Check for power is present. If not -> sleep with ISR on Timer1 active only
+    ; Comparator -> ADC lightness check
+    
+    movlw 0x05
+    movwf Delay2
 dl_set	
-	movlw 0x3E			;1496 инструкций	;7D - для 1 мс ; 3E - 0,5мс ;BB - 1,5мс
-	movwf Delay1
+    movlw 0x3E			;1496 инструкций	;7D - для 1 мс ; 3E - 0,5мс ;BB - 1,5мс
+    movwf Delay1
 
 dl_loop
-    decfsz    Delay1,f       ; Waste time.  
-    goto      dl_loop    ; The Inner loop takes 3 instructions per loop * 256 loopss = 768 instructions = 0,000768 sec.
-	decfsz    Delay2,f       ; The outer loop takes and additional 3 instructions per lap * 256 loops
-    goto      dl_set    ; (768+3) * 256 = 197376 instructions / 1M instructions per second = 0.197 sec.
-                              ; call it two-tenths of a second.
+    decfsz    Delay1,f      ; Waste time.  
+    goto      dl_loop	    ; 
+    decfsz    Delay2,f      ; 
+    goto      dl_set	    ;
+                            ;
 
-	return
+    return
 
     END 
