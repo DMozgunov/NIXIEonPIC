@@ -12,8 +12,8 @@ Current IDE MPLAB X
 ### to do
 
 - [ ] Time set up (schematics Rev. 3, push buttons added)
-- [ ] HV generation by PIC. PWM to step-up and INT to control overvoltage
-- [ ] Alarm clock, maybe some of them.
 - [ ] Power down detection (MCLR port)
 - [ ] Lightness control with photo resistor (comparator + internal Vref as simple rough ADC)
+- [ ] HV generation by PIC. PWM to step-up and INT to control overvoltage
+- [ ] Alarm clock, maybe some of them.
 - [ ] USART for bluetooth connection (well, dreams are dreams)

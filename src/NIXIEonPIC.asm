@@ -116,11 +116,11 @@ CCP1 EQU RB3
 FALSE	EQU 0
 TRUE	EQU 1
 	
-
 NIXIE_ZERO equ b'00000110'
 NIXIE_NINE equ b'00001111'
-	
-	
+
+POWER_IS_UP equ RA5
+ 
 ; Trying to be as clear as possible about port connection
 ; Still not sure it is a good idea
 ; all K155ID1 address lines connected to PORTA
@@ -135,24 +135,42 @@ _74LS138_A0_on_pA equ RA2
 _74LS138_A1_on_pB equ RB5
 _74LS138_A2_on_pB equ RB4 
 	
+ 
+BT_MODE equ RA3	
+BT_INC equ RA4
+BT_DEC equ RA6
+BT_SNOOZE equ RA7
+ 
+ 
 Debug EQU FALSE       ; A Debugging Flag
 
 cblock 0x20		; (max 80 Bytes)
     Delay1
     Delay2
-    dataL
+    
 
     SECONDS_BCD		; Storing seconds for display on NIXIE ()
     MINUTES_BCD
     HOURS_BCD
 
-    PORTA_TMP		; Used to save PORTA value
+    PORTA_TMP		; Used to save PORTA value during indication process. Used for output values
+    PORTB_TMP		; This is tmp reg for PORTB set up during dynamic indication
+    
+    PORTA_IN_TMP	; 
+    
+    ; Buttons debounce
+    BUTTONS_COUNT_BT_MODE   ; counters for debounce
+    BUTTONS_COUNT_BT_INC
+    BUTTONS_COUNT_BT_DEC
+    BUTTONS_COUNT_BT_SNOOZE
+    
+    BUTTONS_UP		; Buttons, pushed by user and debounced in software
+    
     VAL_FOR_INDICATION	; This reg stores value of seconds, minutes or houres
 			; which is to be shown on tubes
-    PORTB_TMP	; This is tmp reg for PORTB set up during dynamic indication
-    
+        
     INDICATION_TMP1	; temporary register to hold PORTA output bits
-    INDICATION_TMP2	;
+
     
     endc
      
@@ -197,11 +215,11 @@ RES_VECT  CODE    0x0000            ; processor reset vector
 ISR       CODE    0x0004
     	
        
-    movwf     W_Save              ; Save context
-    movf      STATUS,w
-    movwf     STATUS_Save
+    movwf W_Save              ; Save context
+    movf STATUS,w
+    movwf STATUS_Save
 
-    bcf	    STATUS,RP0       ; select Register Page 0
+    bcf STATUS,RP0       ; select Register Page 0
 
     if ( Debug )
 	bsf     PORTA, 0            ; Set high, use to measure total
@@ -521,10 +539,173 @@ Set_PORTx_for_DISPLAY
 
 END_TIME_INDICATION		
     return
-		
-
+	
+    
 ;===============================================================================
-; * Delays and other subroutines
+; * Special routine for all unimportant stuff
+;===============================================================================        
+WASTE_TIME_DYNAMICALLY:		;
+    
+    ; Not good to waste time, we have 1.5 ms so
+    
+    ; Good idea to add USART buffers check here. 
+    ; Check for power is present. If not -> sleep with ISR on Timer1 active only
+    ; Comparator -> ADC lightness check
+    
+; approximately 1.5 ms
+    movlw 0x05
+    movwf Delay2
+dl_set	
+    movlw 0x3E			;1496 инструкций	;7D - для 1 мс ; 3E - 0,5мс ;BB - 1,5мс
+    movwf Delay1
+
+dl_loop
+    decfsz    Delay1,f      ; Waste time.  
+    goto      dl_loop	    ; 
+    decfsz    Delay2,f      ; 
+    goto      dl_set	    ;
+                            ;
+
+    return
+
+BUTTONS:    
+;===============================================================================
+; * Button debounce and further process routine 
+;===============================================================================    
+; 
+    
+    movf PORTA, W	    ; save current PORTA output pin state
+    movwf PORTA_TMP
+    
+    ; PORTA pins RA1 RA3 RA4 RA5 RA6 RA7 are inputs for now
+    movlw b'11111010' 
+    movwf TRISA             
+    
+    movf PORTA, W	    ; read PORTA inputs
+    movwf PORTA_IN_TMP
+    
+    ; restore PORTA outputs pins RA1 and RA5 are inputs, all the others are output 
+    movlw b'00100010' 
+    movwf TRISA             
+
+    movf PORTA_TMP, W
+    movwf PORTA		    ; restore current PORTA output state
+
+    ;; now debounce. we do it every indication loop (1.5 Ms) no to waste time
+    
+    
+    ; debounce BT_MODE
+    btfss PORTA_IN_TMP, BT_MODE
+    goto clear_BT_MODE	    ; clear counter, assume button was never pushed
+    
+    incf BUTTONS_COUNT_BT_MODE, W	    
+    movwf BUTTONS_COUNT_BT_MODE
+    
+    xorlw 5		    ; looking for 5 in a row
+    
+    btfss STATUS, Z	    ; if Z=1 then we have 5 in row
+    goto check_BT_INC   
+    
+    bsf BUTTONS_UP, BT_MODE ; BT_MODE is pushed by user and debounced
+    
+clear_BT_MODE    
+    clrf BUTTONS_COUNT_BT_MODE
+    
+    
+    ; debounce BT_INC 
+check_BT_INC   
+    
+    btfss PORTA_IN_TMP, BT_INC
+    goto clear_BT_INC
+    
+    incf BUTTONS_COUNT_BT_INC, W
+    movwf BUTTONS_COUNT_BT_INC
+    
+    xorlw 5		    ; looking for 5 in a row
+    
+    btfss STATUS, Z	    ; if Z=1 then we have 5 in row
+    goto check_BT_DEC   
+    
+    bsf BUTTONS_UP, BT_INC ; BT_INC is pushed by user and debounced
+    
+clear_BT_INC     
+    clrf BUTTONS_COUNT_BT_INC
+    
+    
+    ; debounce BT_DEC
+check_BT_DEC
+    
+    btfss PORTA_IN_TMP, BT_DEC
+    goto clear_BT_DEC
+    
+    incf BUTTONS_COUNT_BT_DEC, W
+    movwf BUTTONS_COUNT_BT_DEC
+    
+    xorlw 5		    ; looking for 5 in a row
+    
+    btfss STATUS, Z	    ; if Z=1 then we have 5 in row
+    goto check_BT_SNOOZE   
+    
+    bsf BUTTONS_UP, BT_DEC ; BT_INC is pushed by user and debounced
+    
+clear_BT_DEC     
+    clrf BUTTONS_COUNT_BT_DEC
+ 
+    
+    ; debounce BT_SNOOZE
+check_BT_SNOOZE    
+    
+    btfss PORTA_IN_TMP, BT_SNOOZE
+    goto clear_BT_SNOOZE
+    
+    incf BUTTONS_COUNT_BT_SNOOZE, W
+    movwf BUTTONS_COUNT_BT_SNOOZE
+    
+    xorlw 5		    ; looking for 5 in a row
+    
+    btfss STATUS, Z	    ; if Z=1 then we have 5 in row
+    goto process_BUTTONS_UP   
+    
+    bsf BUTTONS_UP, BT_SNOOZE ; BT_INC is pushed by user and debounced
+    
+clear_BT_SNOOZE
+    clrf BUTTONS_COUNT_BT_SNOOZE
+    
+    
+process_BUTTONS_UP    
+    ;PORTA, RA0 - test led output. temporary. 
+    
+    
+    
+    comf BUTTONS_UP, W
+    
+    btfsc STATUS, Z	; Z=1 means nothing have been pushed and debounced
+    goto end_debounce
+    
+    ; debug
+    btfsc PORTA, RA0
+    goto invertLED
+    
+    bsf PORTA, RA0
+    goto $+1
+    
+invertLED    
+    bcf PORTA, RA0
+    
+    
+;BT_MODE
+;BT_INC
+;BT_DEC
+;BT_SNOOZE
+
+    clrf BUTTONS_UP
+   
+end_debounce    
+    return
+    
+    
+;===============================================================================
+; * Delays 
 ;===============================================================================
 
     
@@ -539,35 +720,6 @@ DELAY_197_MS:
     decfsz    Delay2,f       ; The outer loop takes and additional 3 instructions per lap * 256 loops
     goto      DELAY_197_MS    ; (768+3) * 256 = 197376 instructions / 1M instructions per second = 0.197 sec.
                               ; call it two-tenths of a second.
-
-    return
-
-
-
-;---
-; approximately 1.5 ms
-;-----
-
-WASTE_TIME_DYNAMICALLY:		;
-    
-    ; Not good to waste time, we have 1.5 ms so
-    
-    ; Good idea to add USART buffers check here. 
-    ; Check for power is present. If not -> sleep with ISR on Timer1 active only
-    ; Comparator -> ADC lightness check
-    
-    movlw 0x05
-    movwf Delay2
-dl_set	
-    movlw 0x3E			;1496 инструкций	;7D - для 1 мс ; 3E - 0,5мс ;BB - 1,5мс
-    movwf Delay1
-
-dl_loop
-    decfsz    Delay1,f      ; Waste time.  
-    goto      dl_loop	    ; 
-    decfsz    Delay2,f      ; 
-    goto      dl_set	    ;
-                            ;
 
     return
 
