@@ -851,7 +851,7 @@ process_BUTTONS_UP
 invertLED
 >>>>>>> origin/master
     bcf PORTA, RA0
-d
+
 
 ;BT_MODE
 ;BT_INC
