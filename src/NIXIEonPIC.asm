@@ -148,6 +148,7 @@ cblock 0x20		; (max 80 Bytes)
     Delay1
     Delay2
     
+    USART_RECEIVED
 
     SECONDS_BCD		; Storing seconds for display on NIXIE ()
     MINUTES_BCD
@@ -215,25 +216,28 @@ RES_VECT  CODE    0x0000            ; processor reset vector
 ISR       CODE    0x0004
     	
        
-    movwf W_Save              ; Save context
+    movwf W_Save		; Save context
     movf STATUS,w
     movwf STATUS_Save
 
-    bcf STATUS,RP0       ; select Register Page 0
+    bcf STATUS,RP0		; select Register Page 0
 
     if ( Debug )
-	bsf     PORTA, 0            ; Set high, use to measure total
-    endif                           ;     time in Int Service Routine
+	bsf PORTA, 0            ; Set high, use to measure total
+    endif                       ; time in Int Service Routine
 
 
     ; Select Interrupt to process
-    btfsc     PIR1,TMR1IF           ; Check Timer 1 - one more second to go
-    goto      ServiceTimer1
+    btfsc PIR1,TMR1IF           ; Check Timer 1 - one more second to go
+    goto ServiceTimer1
     
-    goto      ExitISR
+    
+    
+    
+    goto ExitISR
 
 ServiceTimer1:
-    bcf       PIR1,TMR1IF         ; clear the interrupt flag. (must be done in software)
+    bcf PIR1,TMR1IF         ; clear the interrupt flag. (must be done in software)
 
     MOVLW 0x80
     MOVWF TMR1H ; 1 Second Overflow
@@ -373,6 +377,7 @@ MAIN_PROGRAM:
     bsf STATUS,RP0		; select Register Page 1
 
     bsf PIE1, TMR1IE		; TMR1 overflow interrupt
+    ;bsf PIE1, RCIE		; USART receiver interrupt
 
     bcf STATUS,RP0		; select Register Page 0
 
@@ -391,6 +396,53 @@ MAIN_PROGRAM:
     BSF T1CON, TMR1ON 		; Turn Timer 1 ON
 
 
+
+;===============================================================================
+; PWM setup
+;===============================================================================  
+; not finished
+ 
+        ; ШИМ Page 61 of datasheet
+;    movlw	   	0x3F			; частота 0,6КГц
+ ;   movwf	   	PR2
+ 
+    
+;	movlw		b'00101100'	  	;
+;	movwf		CCP1CON			; активируем ШИМ правого двигателя  
+ 
+;	clrf		TMR2			; очистка Таймера 2
+;
+;	clrf		CCPR1L			; скважность = 0% правого двигателя 
+;
+;	movlw		b'00101100'	  	;
+
+;	movwf		CCP1CON			; активируем ШИМ правого двигателя 
+;	   	  
+;==== таймер ШИМ
+;	bcf			PIR1,TMR2IF		; очистка флага прерывания таймера
+;	
+;	clrf		T2CON		  
+;	bsf			T2CON,T2CKPS1	; prescaler = 16
+;	bsf			T2CON,TMR2ON	; активируем таймер
+ ;
+ 
+;===============================================================================
+; USART setup
+;===============================================================================
+ 
+;	movlw		0x0C            ; 19200 
+	movlw		0x19		; 9600, calculated constant
+	movwf		SPBRG
+
+	movlw		b'00100100'     ; brgh = high (2)
+	movwf		TXSTA           ; Asynchronous mode
+    
+	movlw		b'10010000'     ; Asynchronous mode
+	movwf		RCSTA
+    	clrf		USART_RECEIVED	
+    
+    
+    
 ;===============================================================================
 ; Initial time to display - 0:00:00
 ;===============================================================================
@@ -687,7 +739,7 @@ process_BUTTONS_UP
     goto invertLED
     
     bsf PORTA, RA0
-    goto $+1
+    goto $+2
     
 invertLED    
     bcf PORTA, RA0
@@ -723,4 +775,52 @@ DELAY_197_MS:
 
     return
 
+
+; *******************************************************************
+; * USART		
+; *******************************************************************
+ReceiveByte:
+    btfss   PIR1,RCIF		; 
+    goto    NothingReceived
+    
+    movf    RCREG,w		; 
+
+    movwf   USART_RECEIVED
+
+NothingReceived:
+
+    btfsc   RCSTA, OERR		; buffer overflow
+    bcf	    RCSTA, OERR
+
+    return
+
+
+; *******************************************************************
+; *	
+; *******************************************************************
+SendByte:
+    ; Byte is in W
+    bsf	STATUS, RP0		; проверка окончания передачи
+    
+StillNotSent:			; сначала проверим, передали ли предыдущий байт
+    btfss   TXSTA,TRMT		; если бит выставлен, то передача завершена
+    goto    StillNotSent
+    bcf	STATUS,RP0
+
+    movwf   TXREG		; теперь передадим новый байт
+
+    return
+    
+    
+    ;IfRS232Forward:
+    ;movf      	RS232Received,w           
+    ;xorlw     	'8'
+    ;btfss     	STATUS,Z     
+    ;goto      	IfRS232Backward
+
+    ;call      	L_FORWARD_R_FORWARD   	; Движение вперёд
+
+    ;clrf		RS232Received			; чтобы не было циклических повторов выполнения одной и той же команды
+    
+    
     END 
