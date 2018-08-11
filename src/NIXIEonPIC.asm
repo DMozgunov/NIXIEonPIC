@@ -140,16 +140,26 @@ BT_MODE equ RA3
 BT_INC equ RA4
 BT_DEC equ RA6
 BT_SNOOZE equ RA7
+<<<<<<< HEAD
  
  
 Debug EQU TRUE	        ; A Debugging Flag
+=======
+
+
+Debug EQU FALSE       ; A Debugging Flag
+>>>>>>> origin/master
 
 cblock 0x20		; (max 80 Bytes)
     Delay1
     Delay2
 <<<<<<< HEAD
+<<<<<<< HEAD
     
     USART_RECEIVED
+=======
+
+>>>>>>> origin/master
 =======
 
 >>>>>>> origin/master
@@ -219,10 +229,13 @@ RES_VECT  CODE    0x0000            ; processor reset vector
 
 ISR       CODE    0x0004
 <<<<<<< HEAD
+<<<<<<< HEAD
     	
        
     movwf W_Save		; Save context
 =======
+=======
+>>>>>>> origin/master
 
 
     movwf W_Save              ; Save context
@@ -244,6 +257,13 @@ ISR       CODE    0x0004
 
 
     ; Select Interrupt to process
+<<<<<<< HEAD
+=======
+    btfsc     PIR1,TMR1IF           ; Check Timer 1 - one more second to go
+    goto      ServiceTimer1
+
+    goto      ExitISR
+>>>>>>> origin/master
 
 ServiceTimer1:
     bcf PIR1,TMR1IF         ; clear the interrupt flag. (must be done in software)
@@ -349,6 +369,7 @@ ExitISR
 
     if ( Debug )
 <<<<<<< HEAD
+<<<<<<< HEAD
     btfsc PIR1,TMR1IF           ; Check Timer 1 - one more second to go
     goto ServiceTimer1
     
@@ -362,6 +383,10 @@ ExitISR
 
     goto      ExitISR
 >>>>>>> origin/master
+=======
+    bcf     PORTB, 0            ; Set high, use to measure total
+    endif
+>>>>>>> origin/master
 
     retfie
 
@@ -372,17 +397,38 @@ MAIN_PROGRAM:
 ; ------------------------------------
 
 <<<<<<< HEAD
+<<<<<<< HEAD
    
     endif  
 =======
     bcf     PORTB, 0            ; Set high, use to measure total
     endif
 >>>>>>> origin/master
+=======
+    movlw 7
+    movwf CMCON             ; CMCON=7 set comperators off
+>>>>>>> origin/master
 
     clrf PORTA
     clrf PORTB
 
+<<<<<<< HEAD
     bsf STATUS,RP0		; select Register Page 1
+=======
+    bsf STATUS,RP0	    ; select Register Page 1
+
+    movlw b'00100010'
+    movwf TRISA             ; portA pins RA1 and RA5 are inputs, all the others are output
+
+    movlw b'11000010'       ; RB7-RB6(RTC crystal), RB1(RX) and RB0(INT for PWM control) =input, others output
+    movwf TRISB
+
+    bsf PORTA, RA0
+
+; ------------------------------------
+; TIMER1 and interrupts SETUP
+; ------------------------------------
+>>>>>>> origin/master
 
 <<<<<<< HEAD
     bcf STATUS,RP0		; select Register Page 0
@@ -485,11 +531,17 @@ MAIN_PROGRAM:
 ;
 
 <<<<<<< HEAD
+<<<<<<< HEAD
     movlw b'00100010' 
     movwf TRISA			; portA pins RA1 and RA5 are inputs, all the others are output 
 =======
     movlw b'00100010'
     movwf TRISA             ; portA pins RA1 and RA5 are inputs, all the others are output
+>>>>>>> origin/master
+=======
+MAIN_LOOP:
+
+    ; SECONDS
 >>>>>>> origin/master
     movf SECONDS_BCD, w			; select seconds data for subroutine
     movwf VAL_FOR_INDICATION		; move it into tmp reg to use inside subroutine
@@ -632,7 +684,11 @@ WASTE_TIME_DYNAMICALLY:		;
     ; Check for power is present. If not -> sleep with ISR on Timer1 active only
     ; Comparator -> ADC lightness check
 
+<<<<<<< HEAD
     goto BUTTONS 
+=======
+    goto BUTTONS
+>>>>>>> origin/master
 
 ; approximately 1.5 ms
     movlw 0x05
@@ -774,11 +830,17 @@ process_BUTTONS_UP
 
     bsf PORTA, RA0
 <<<<<<< HEAD
+<<<<<<< HEAD
     movlw b'11000011'		; RB7-RB6(RTC crystal), RB1(RX) and RB0(INT for PWM control) = input, others output 
     movwf TRISB 
 =======
     movlw b'11000010'       ; RB7-RB6(RTC crystal), RB1(RX) and RB0(INT for PWM control) =input, others output
     movwf TRISB
+>>>>>>> origin/master
+=======
+    goto $+1
+
+invertLED
 >>>>>>> origin/master
     bcf PORTA, RA0
 
@@ -814,9 +876,13 @@ DELAY_197_MS:
     return
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 ; ------------------------------------ 
 ; 
 =======
 ; ------------------------------------
 
+>>>>>>> origin/master
+=======
+    END
 >>>>>>> origin/master
