@@ -617,7 +617,10 @@ WASTE_TIME_DYNAMICALLY:		;
     ; Check for power is present. If not -> sleep with ISR on Timer1 active only
     ; Comparator -> ADC lightness check
     
-; approximately 1.5 ms
+    ; approximately 1.5 ms
+    
+    ;call BUTTONS	; 
+    
     movlw 0x05
     movwf Delay2
 dl_set	
