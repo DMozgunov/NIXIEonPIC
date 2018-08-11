@@ -63,7 +63,7 @@
 
 ; config for PIC16F628
 __config  _INTOSC_OSC_NOCLKOUT & _LVP_OFF & _WDT_OFF & _PWRTE_ON & _BODEN_OFF & _MCLRE_OFF & _CP_OFF
-
+;
 
 ;*******************************************************************************
 ;
@@ -92,15 +92,15 @@ __config  _INTOSC_OSC_NOCLKOUT & _LVP_OFF & _WDT_OFF & _PWRTE_ON & _BODEN_OFF & 
 ;*******************************************************************************
 
 ; make PORTA and PORTB pins more readable
-RA0 EQU 0 
-RA1 EQU 1 
-RA2 EQU 2 
-RA3 EQU 3 
+RA0 EQU 0
+RA1 EQU 1
+RA2 EQU 2
+RA3 EQU 3
 RA4 EQU 4
 RA5 EQU 5
 RA6 EQU 6
-RA7 EQU 7    
-    
+RA7 EQU 7
+
 RB0 EQU 0
 RB1 EQU 1
 RB2 EQU 2
@@ -115,28 +115,28 @@ CCP1 EQU RB3
 
 FALSE	EQU 0
 TRUE	EQU 1
-	
+
 NIXIE_ZERO equ b'00000110'
 NIXIE_NINE equ b'00001111'
 
 POWER_IS_UP equ RA5
- 
+
 ; Trying to be as clear as possible about port connection
 ; Still not sure it is a good idea
 ; all K155ID1 address lines connected to PORTA
-K155ID1_A0_on_pA equ RA3	
+K155ID1_A0_on_pA equ RA3
 K155ID1_A1_on_pA equ RA4
 K155ID1_A2_on_pA equ RA6
 K155ID1_A3_on_pA equ RA7
- 
+
 ; 74LS138 address lines are both on PORTA and PORTB
 ; need to be carefull
 _74LS138_A0_on_pA equ RA2
 _74LS138_A1_on_pB equ RB5
-_74LS138_A2_on_pB equ RB4 
-	
- 
-BT_MODE equ RA3	
+_74LS138_A2_on_pB equ RB4
+
+
+BT_MODE equ RA3
 BT_INC equ RA4
 BT_DEC equ RA6
 BT_SNOOZE equ RA7
@@ -147,8 +147,12 @@ Debug EQU TRUE	        ; A Debugging Flag
 cblock 0x20		; (max 80 Bytes)
     Delay1
     Delay2
+<<<<<<< HEAD
     
     USART_RECEIVED
+=======
+
+>>>>>>> origin/master
 
     SECONDS_BCD		; Storing seconds for display on NIXIE ()
     MINUTES_BCD
@@ -156,31 +160,31 @@ cblock 0x20		; (max 80 Bytes)
 
     PORTA_TMP		; Used to save PORTA value during indication process. Used for output values
     PORTB_TMP		; This is tmp reg for PORTB set up during dynamic indication
-    
-    PORTA_IN_TMP	; 
-    
+
+    PORTA_IN_TMP	;
+
     ; Buttons debounce
     BUTTONS_COUNT_BT_MODE   ; counters for debounce
     BUTTONS_COUNT_BT_INC
     BUTTONS_COUNT_BT_DEC
     BUTTONS_COUNT_BT_SNOOZE
-    
+
     BUTTONS_UP		; Buttons, pushed by user and debounced in software
-    
+
     VAL_FOR_INDICATION	; This reg stores value of seconds, minutes or houres
 			; which is to be shown on tubes
-        
+
     INDICATION_TMP1	; temporary register to hold PORTA output bits
 
-    
+
     endc
-     
+
 
     cblock 0x70     ; put these up in unbanked RAM (max 16 Bytes)
 		W_Save
 		STATUS_Save
     endc
-   
+
 ;*******************************************************************************
 ; Reset Vector
 ;*******************************************************************************
@@ -214,9 +218,15 @@ RES_VECT  CODE    0x0000            ; processor reset vector
 ;*******************************************************************************
 
 ISR       CODE    0x0004
+<<<<<<< HEAD
     	
        
     movwf W_Save		; Save context
+=======
+
+
+    movwf W_Save              ; Save context
+>>>>>>> origin/master
     movf STATUS,w
     movwf STATUS_Save
 
@@ -234,13 +244,6 @@ ISR       CODE    0x0004
 
 
     ; Select Interrupt to process
-    btfsc PIR1,TMR1IF           ; Check Timer 1 - one more second to go
-    goto ServiceTimer1
-    
-    
-    
-    
-    goto ExitISR
 
 ServiceTimer1:
     bcf PIR1,TMR1IF         ; clear the interrupt flag. (must be done in software)
@@ -251,7 +254,7 @@ ServiceTimer1:
 
     ; Count NIXIE TIME
     ; Look at the seconds/minutes coding
-    
+
     ;|--------|--------|
     ;|  0000  |  0110  | 0 sec.
     ;|  0000  |  0111  | 1 sec.
@@ -259,40 +262,40 @@ ServiceTimer1:
     ;|  0000  |  1001  | 3 sec.
     ;.................
     ;|  0000  |  1111  | 9 sec.
-    
+
     ;|  0001  |  0000  | 10 sec.
     ;..................
     ;|  0101  |  1111  | 59 sec.
-    
+
     ;|  0110  |  0000  | 60 sec. after common increment, but we have 0 as 0110
-    ;  in lower nibble so our 60 seconds should look like this: 
-    ;|  0110  |  0110  | 
-   
+    ;  in lower nibble so our 60 seconds should look like this:
+    ;|  0110  |  0110  |
+
     ; it makes incremet working correctly
     ; but also means we have to substitute 0110 every time to get correct
     ; value to make it possible to display lower nibble digit correctly
-    
+
     incf SECONDS_BCD, F 		; add one more second to NIXIE TIME
 
-    movlw NIXIE_NINE			; 
+    movlw NIXIE_NINE			;
     andwf SECONDS_BCD, W
 
     btfss STATUS, Z			; if we've got 0001 0000 in  SECONDS_BCD then we need to zero (xxxx 0110)
     goto SECONDS_CHECK			; last NIXIE digit and add one to decade
 
-    movlw NIXIE_ZERO     
-    iorwf SECONDS_BCD, F	
+    movlw NIXIE_ZERO
+    iorwf SECONDS_BCD, F
 
 SECONDS_CHECK
 
-    movlw b'01100110'			; this is how 60 looks like in this system. 
+    movlw b'01100110'			; this is how 60 looks like in this system.
     subwf SECONDS_BCD, W
-	
+
     btfss STATUS, Z			; if we got 60 seconds, add one minute and clear seconds to zero (00000110)
     goto ExitISR
 
     movlw NIXIE_ZERO			; move 0110 to lower nibble. 00 seconds it is
-    movwf SECONDS_BCD 		
+    movwf SECONDS_BCD
 
     incf MINUTES_BCD, F
 
@@ -302,8 +305,8 @@ SECONDS_CHECK
     btfss STATUS, Z
     goto MINUTES_CHECK
 
-    movlw NIXIE_ZERO     
-    iorwf MINUTES_BCD, F	
+    movlw NIXIE_ZERO
+    iorwf MINUTES_BCD, F
 
 MINUTES_CHECK
 
@@ -314,7 +317,7 @@ MINUTES_CHECK
     goto ExitISR
 
     movlw NIXIE_ZERO			; move 0110 to lower nibble. 00 minutes it is
-    movwf MINUTES_BCD 		
+    movwf MINUTES_BCD
 
     incf HOURS_BCD, F
 
@@ -324,18 +327,18 @@ MINUTES_CHECK
     btfss STATUS, Z
     goto HOURS_CHECK
 
-    movlw NIXIE_ZERO   
+    movlw NIXIE_ZERO
     iorwf HOURS_BCD, F
 
 HOURS_CHECK
     movlw b'00101010'
     subwf HOURS_BCD, W
-	
+
     btfss STATUS, Z			; we reached 24 houres, so time to 00:00:00
     goto ExitISR
 
-    movlw NIXIE_ZERO			; 
-    movwf HOURS_BCD	
+    movlw NIXIE_ZERO			;
+    movwf HOURS_BCD
 
 
 ExitISR
@@ -345,40 +348,58 @@ ExitISR
     swapf     W_Save,w
 
     if ( Debug )
-   
-    endif  
+<<<<<<< HEAD
+    btfsc PIR1,TMR1IF           ; Check Timer 1 - one more second to go
+    goto ServiceTimer1
+    
+    
+    
+    
+    goto ExitISR
+=======
+    btfsc     PIR1,TMR1IF           ; Check Timer 1 - one more second to go
+    goto      ServiceTimer1
+
+    goto      ExitISR
+>>>>>>> origin/master
 
     retfie
 
 
 MAIN_PROGRAM:
-; ------------------------------------ 
+; ------------------------------------
 ; PORTS SETUP
-; ------------------------------------ 
+; ------------------------------------
 
-    bcf STATUS,RP0		; select Register Page 0
-    bcf STATUS,RP1		; 
-    
-    movlw 7 
-    movwf CMCON			; CMCON=7 set comperators off 
+<<<<<<< HEAD
+   
+    endif  
+=======
+    bcf     PORTB, 0            ; Set high, use to measure total
+    endif
+>>>>>>> origin/master
 
     clrf PORTA
     clrf PORTB
 
     bsf STATUS,RP0		; select Register Page 1
 
-    movlw b'00100010' 
-    movwf TRISA			; portA pins RA1 and RA5 are inputs, all the others are output 
+<<<<<<< HEAD
+    bcf STATUS,RP0		; select Register Page 0
+    bcf STATUS,RP1		; 
+    
+    movlw 7 
+    movwf CMCON			; CMCON=7 set comperators off 
+=======
+    movlw 7
+    movwf CMCON             ; CMCON=7 set comperators off
+>>>>>>> origin/master
 
-    movlw b'11000011'		; RB7-RB6(RTC crystal), RB1(RX) and RB0(INT for PWM control) = input, others output 
-    movwf TRISB 
 
+    bsf PORTA, RA0
 
-
-; ------------------------------------ 
+; ------------------------------------
 ; TIMER1 and interrupts SETUP
-; ------------------------------------ 
-; 
     bsf PIE1, TMR1IE		; TMR1 overflow interrupt
     ;bsf PIE1, RCIE		; USART receiver interrupt
 
@@ -454,47 +475,41 @@ MAIN_PROGRAM:
     movwf SECONDS_BCD		; NIXIE - ZERO seconds
     movwf MINUTES_BCD		; NIXIE - ZERO minutes
     movwf HOURS_BCD		; NIXIE - ZERO hours
-    
+
     clrf PORTB_TMP
 
 ;===============================================================================
-; Main loop 
+; Main loop
 ; infinite loop to serve indication on tubes
 ;===============================================================================
-; 
+;
 
-MAIN_LOOP:  
-       
-    if ( Debug )
-	;RA0 is our LED debug output for now
-	
-	movlw 'M'
-	call SendByte
-	call EndLine
-    endif 
-    
-    
-    
-    ; SECONDS 
+<<<<<<< HEAD
+    movlw b'00100010' 
+    movwf TRISA			; portA pins RA1 and RA5 are inputs, all the others are output 
+=======
+    movlw b'00100010'
+    movwf TRISA             ; portA pins RA1 and RA5 are inputs, all the others are output
+>>>>>>> origin/master
     movf SECONDS_BCD, w			; select seconds data for subroutine
     movwf VAL_FOR_INDICATION		; move it into tmp reg to use inside subroutine
 
-    ; set demultiplexor 
-    bsf PORTB_TMP, _74LS138_A2_on_pB	
+    ; set demultiplexor
+    bsf PORTB_TMP, _74LS138_A2_on_pB
     bcf PORTB_TMP, _74LS138_A1_on_pB
 
     call TIME_INDICATION		; show seconds on tubes
 
     call WASTE_TIME_DYNAMICALLY		; need some time before turning nex tube on
 
-    ; MINUTES 
+    ; MINUTES
     movf MINUTES_BCD, W			; select minutes data for subroutine
     movwf VAL_FOR_INDICATION		; move it into tmp reg to use inside subroutine
 
-    ; set demultiplexor 
-    bcf PORTB_TMP, _74LS138_A2_on_pB	
+    ; set demultiplexor
+    bcf PORTB_TMP, _74LS138_A2_on_pB
     bsf PORTB_TMP, _74LS138_A1_on_pB
-		
+
     call TIME_INDICATION		; show minutes on tubes
 
     call WASTE_TIME_DYNAMICALLY		; need some time before turning nex tube on
@@ -503,25 +518,25 @@ MAIN_LOOP:
     movf HOURS_BCD, W			; select houres data for subroutine
     movwf VAL_FOR_INDICATION		; move it into tmp reg to use inside subroutine
 
-    ; set demultiplexor 
-    bcf PORTB_TMP, _74LS138_A2_on_pB	; 
+    ; set demultiplexor
+    bcf PORTB_TMP, _74LS138_A2_on_pB	;
     bcf PORTB_TMP, _74LS138_A1_on_pB
-		
+
     call TIME_INDICATION		; show houres on tubes
-		
+
     call WASTE_TIME_DYNAMICALLY		; need some time before turning next tubes on
 
-    goto MAIN_LOOP 
+    goto MAIN_LOOP
 
-    
+
 ;===============================================================================
 ; Subroutine to show either houres, minutes or seconds
 ;===============================================================================
 TIME_INDICATION:
 
 
-    movlw NIXIE_ZERO		
-				
+    movlw NIXIE_ZERO
+
     subwf VAL_FOR_INDICATION, F		; get coorect values for indication
 
     clrf PORTA_TMP
@@ -531,52 +546,52 @@ showDozensOnSecondPass
 
     movf PORTA, W			; preserve some PORTA bits from changing
     andlw b'00100011'			; RA0 RA1 RA5
-    iorwf PORTA_TMP, F			; 
-	
-    
-    ;btfsc PORTA_TMP, _74LS138_A0_on_pA	; если бит PORTA_TMP выставлен, то организуем вывод единиц. так как вывод производится 
+    iorwf PORTA_TMP, F			;
+
+
+    ;btfsc PORTA_TMP, _74LS138_A0_on_pA	; если бит PORTA_TMP выставлен, то организуем вывод единиц. так как вывод производится
     swapf VAL_FOR_INDICATION, F		; из старшего разряда, то необходимо обменять полубайты
 					;для вывода десятков обмен полубайтов не производим
-		
+
     ; get PORTA output bits for 155ID1 (schematics Rev.3)
     ; it is connected on RA3 RA4 RA6 RA7, PORTA mask is 11011000
     movf VAL_FOR_INDICATION, W
-    
+
     andlw b'00110000'			; need to get this bits from upper nibble and rotate tem left
-    
+
     movwf INDICATION_TMP1
     rrf INDICATION_TMP1, F		; mask is 00011000
-        
-    movf VAL_FOR_INDICATION, W
-    andlw b'11000000'			; 
-        
-    iorwf INDICATION_TMP1, W		; mask is 11011000
-    
-    ; Now get output bits fot 155ID1 in PORTA
-    iorwf PORTA_TMP, F			; 
 
-    
-    ; Now get PORTB bits 
-    
+    movf VAL_FOR_INDICATION, W
+    andlw b'11000000'			;
+
+    iorwf INDICATION_TMP1, W		; mask is 11011000
+
+    ; Now get output bits fot 155ID1 in PORTA
+    iorwf PORTA_TMP, F			;
+
+
+    ; Now get PORTB bits
+
     ; 74LS138 has 000 or 001 on A2 A1 A0 inputs respectfully
     ; so PORTB look like xx00xxxx in this case
-    movf PORTB_TMP, W			; 
-    
-    ;Checking weather we work with houres 
+    movf PORTB_TMP, W			;
+
+    ;Checking weather we work with houres
     andlw b'00110000'			; mask for Houres to show on tubes
-		
+
     btfss STATUS, Z			; if Z=1 then we should check if decades of houres should be displayed
     goto Set_PORTx_for_DISPLAY
 
-    btfsc PORTA_TMP, _74LS138_A0_on_pA	; (RA2) = 0 decades of houres should be displayed. 
+    btfsc PORTA_TMP, _74LS138_A0_on_pA	; (RA2) = 0 decades of houres should be displayed.
     goto Set_PORTx_for_DISPLAY
-		
+
     movwf INDICATION_TMP1 		; save data for PORTB from W
-        
+
     ; 00 houres is 00000110
     ; but we shoul show only 0, so upper nibble is skipped in this case
-    movf PORTA_TMP, W			; 
-    andlw b'11011000'			; 
+    movf PORTA_TMP, W			;
+    andlw b'11011000'			;
 
     btfsc STATUS, Z			; Z = 1 means we have no zero in houres decades which is not to be shown on tube
     goto END_TIME_INDICATION
@@ -588,13 +603,13 @@ Set_PORTx_for_DISPLAY
 
     ; W contains bits for PORTB
     bcf PORTB, _74LS138_A2_on_pB	; set PORTB to demultiplexor outputs
-    bcf PORTB, _74LS138_A1_on_pB	; 
+    bcf PORTB, _74LS138_A1_on_pB	;
     iorwf PORTB, F
 
     movf PORTA_TMP, W			; Set PORTA outputs
-    movwf PORTA				; 
+    movwf PORTA				;
 
-    clrf PORTA_TMP			; 
+    clrf PORTA_TMP			;
 
     btfss PORTA, _74LS138_A0_on_pA	; if set then go to display decades on tube
     goto END_TIME_INDICATION
@@ -602,185 +617,195 @@ Set_PORTx_for_DISPLAY
     call WASTE_TIME_DYNAMICALLY		; need some time before turning next tubes on
     goto showDozensOnSecondPass
 
-END_TIME_INDICATION		
+END_TIME_INDICATION
     return
-	
-    
+
+
 ;===============================================================================
 ; * Special routine for all unimportant stuff
-;===============================================================================        
+;===============================================================================
 WASTE_TIME_DYNAMICALLY:		;
-    
+
     ; Not good to waste time, we have 1.5 ms so
-    
-    ; Good idea to add USART buffers check here. 
+
+    ; Good idea to add USART buffers check here.
     ; Check for power is present. If not -> sleep with ISR on Timer1 active only
     ; Comparator -> ADC lightness check
-    
+
+    goto BUTTONS 
+
 ; approximately 1.5 ms
     movlw 0x05
     movwf Delay2
-dl_set	
+dl_set
     movlw 0x3E			;1496 инструкций	;7D - для 1 мс ; 3E - 0,5мс ;BB - 1,5мс
     movwf Delay1
 
 dl_loop
-    decfsz    Delay1,f      ; Waste time.  
-    goto      dl_loop	    ; 
-    decfsz    Delay2,f      ; 
+    decfsz    Delay1,f      ; Waste time.
+    goto      dl_loop	    ;
+    decfsz    Delay2,f      ;
     goto      dl_set	    ;
                             ;
 
     return
 
-BUTTONS:    
+BUTTONS:
 ;===============================================================================
-; * Button debounce and further process routine 
-;===============================================================================    
-; 
-    
+; * Button debounce and further process routine
+;===============================================================================
+;
+
     movf PORTA, W	    ; save current PORTA output pin state
     movwf PORTA_TMP
-    
+
+    bsf STATUS,RP0	    ; select Register Page 1
     ; PORTA pins RA1 RA3 RA4 RA5 RA6 RA7 are inputs for now
-    movlw b'11111010' 
-    movwf TRISA             
-    
+    movlw b'11111010'
+    movwf TRISA
+    bcf STATUS,RP0	    ; select Register Page 0
+
     movf PORTA, W	    ; read PORTA inputs
     movwf PORTA_IN_TMP
-    
-    ; restore PORTA outputs pins RA1 and RA5 are inputs, all the others are output 
-    movlw b'00100010' 
-    movwf TRISA             
+
+    bsf STATUS,RP0	    ; select Register Page 1
+    ; restore PORTA outputs pins RA1 and RA5 are inputs, all the others are output
+    movlw b'00100010'
+    movwf TRISA
+    bcf STATUS,RP0	    ; select Register Page 0
 
     movf PORTA_TMP, W
     movwf PORTA		    ; restore current PORTA output state
 
     ;; now debounce. we do it every indication loop (1.5 Ms) no to waste time
-    
-    
+
+
     ; debounce BT_MODE
     btfss PORTA_IN_TMP, BT_MODE
     goto clear_BT_MODE	    ; clear counter, assume button was never pushed
-    
-    incf BUTTONS_COUNT_BT_MODE, W	    
+
+    incf BUTTONS_COUNT_BT_MODE, W
     movwf BUTTONS_COUNT_BT_MODE
-    
+
     xorlw 5		    ; looking for 5 in a row
-    
+
     btfss STATUS, Z	    ; if Z=1 then we have 5 in row
-    goto check_BT_INC   
-    
+    goto check_BT_INC
+
     bsf BUTTONS_UP, BT_MODE ; BT_MODE is pushed by user and debounced
-    
-clear_BT_MODE    
+
+clear_BT_MODE
     clrf BUTTONS_COUNT_BT_MODE
-    
-    
-    ; debounce BT_INC 
-check_BT_INC   
-    
+
+
+    ; debounce BT_INC
+check_BT_INC
+
     btfss PORTA_IN_TMP, BT_INC
     goto clear_BT_INC
-    
+
     incf BUTTONS_COUNT_BT_INC, W
     movwf BUTTONS_COUNT_BT_INC
-    
+
     xorlw 5		    ; looking for 5 in a row
-    
+
     btfss STATUS, Z	    ; if Z=1 then we have 5 in row
-    goto check_BT_DEC   
-    
+    goto check_BT_DEC
+
     bsf BUTTONS_UP, BT_INC ; BT_INC is pushed by user and debounced
-    
-clear_BT_INC     
+
+clear_BT_INC
     clrf BUTTONS_COUNT_BT_INC
-    
-    
+
+
     ; debounce BT_DEC
 check_BT_DEC
-    
+
     btfss PORTA_IN_TMP, BT_DEC
     goto clear_BT_DEC
-    
+
     incf BUTTONS_COUNT_BT_DEC, W
     movwf BUTTONS_COUNT_BT_DEC
-    
+
     xorlw 5		    ; looking for 5 in a row
-    
+
     btfss STATUS, Z	    ; if Z=1 then we have 5 in row
-    goto check_BT_SNOOZE   
-    
+    goto check_BT_SNOOZE
+
     bsf BUTTONS_UP, BT_DEC ; BT_INC is pushed by user and debounced
-    
-clear_BT_DEC     
+
+clear_BT_DEC
     clrf BUTTONS_COUNT_BT_DEC
- 
-    
+
+
     ; debounce BT_SNOOZE
-check_BT_SNOOZE    
-    
+check_BT_SNOOZE
+
     btfss PORTA_IN_TMP, BT_SNOOZE
     goto clear_BT_SNOOZE
-    
+
     incf BUTTONS_COUNT_BT_SNOOZE, W
     movwf BUTTONS_COUNT_BT_SNOOZE
-    
+
     xorlw 5		    ; looking for 5 in a row
-    
+
     btfss STATUS, Z	    ; if Z=1 then we have 5 in row
-    goto process_BUTTONS_UP   
-    
+    goto process_BUTTONS_UP
+
     bsf BUTTONS_UP, BT_SNOOZE ; BT_INC is pushed by user and debounced
-    
+
 clear_BT_SNOOZE
     clrf BUTTONS_COUNT_BT_SNOOZE
-    
-    
-process_BUTTONS_UP    
-    ;PORTA, RA0 - test led output. temporary. 
-    
-    
-    
+
+
+process_BUTTONS_UP
+    ;PORTA, RA0 - test led output. temporary.
+
+
+
     comf BUTTONS_UP, W
-    
+
     btfsc STATUS, Z	; Z=1 means nothing have been pushed and debounced
     goto end_debounce
-    
+
     ; debug
     btfsc PORTA, RA0
     goto invertLED
-    
+
     bsf PORTA, RA0
-    goto $+2
-    
-invertLED    
+<<<<<<< HEAD
+    movlw b'11000011'		; RB7-RB6(RTC crystal), RB1(RX) and RB0(INT for PWM control) = input, others output 
+    movwf TRISB 
+=======
+    movlw b'11000010'       ; RB7-RB6(RTC crystal), RB1(RX) and RB0(INT for PWM control) =input, others output
+    movwf TRISB
+>>>>>>> origin/master
     bcf PORTA, RA0
-    
-    
+
+
 ;BT_MODE
 ;BT_INC
 ;BT_DEC
 ;BT_SNOOZE
 
     clrf BUTTONS_UP
-   
-end_debounce    
+
+end_debounce
     return
-    
-    
+
+
 ;===============================================================================
-; * Delays 
+; * Delays
 ;===============================================================================
 
-    
+
 ;---
 ; approximately 197 ms
 ;-----
 
 DELAY_197_MS:
 
-    decfsz    Delay1,f       ; Waste time.  
+    decfsz    Delay1,f       ; Waste time.
     goto      DELAY_197_MS    ; The Inner loop takes 3 instructions per loop * 256 loopss = 768 instructions
     decfsz    Delay2,f       ; The outer loop takes and additional 3 instructions per lap * 256 loops
     goto      DELAY_197_MS    ; (768+3) * 256 = 197376 instructions / 1M instructions per second = 0.197 sec.
@@ -788,75 +813,10 @@ DELAY_197_MS:
 
     return
 
+<<<<<<< HEAD
+; ------------------------------------ 
+; 
+=======
+; ------------------------------------
 
-; *******************************************************************
-; * USART		
-; *******************************************************************
-ReceiveByte:
-    btfss   PIR1,RCIF		; 
-    goto    NothingReceived
-    
-    movf    RCREG,w		; 
-
-    movwf   USART_RECEIVED
-
-NothingReceived:
-
-    btfsc   RCSTA, OERR		; buffer overflow
-    bcf	    RCSTA, OERR
-
-    return
-
-
-; *******************************************************************
-; *	
-; *******************************************************************
-SendByte:
-    ; Byte is in W
-    bsf	STATUS, RP0		; проверка окончания передачи
-    
-StillNotSent:			; сначала проверим, передали ли предыдущий байт
-    btfss   TXSTA,TRMT		; если бит выставлен, то передача завершена
-    goto    StillNotSent
-    bcf	STATUS,RP0
-
-    movwf   TXREG		; теперь передадим новый байт
-
-    return
-    
-; *******************************************************************
-; * send end of the lin (Win. style )
-; *******************************************************************
-EndLine:
-        movlw  0x0D ; CR 
-        call SendByte 
-        movlw  0x0A ; LF 
-        call SendByte 
-		
-	return     
-    ;IfRS232Forward:
-    ;movf      	RS232Received,w           
-    ;xorlw     	'8'
-    ;btfss     	STATUS,Z     
-    ;goto      	IfRS232Backward
-
-    ;call      	L_FORWARD_R_FORWARD   	; Движение вперёд
-
-    ;clrf		RS232Received			; чтобы не было циклических повторов выполнения одной и той же команды
-    
-    
-; *******************************************************************
-; * Debug with LED
-; *******************************************************************
-LED_debug:
-        	
-	btfss PORTA, RA0
-	goto $+3
-	bcf PORTA, RA0
-	
-	goto $+2
-	bsf PORTA, RA0
-	
-	return     
-    
-    END 
+>>>>>>> origin/master
