@@ -8,7 +8,6 @@ Current IDE MPLAB X
 - [x] Indication on NIXIE
 - [x] Implementation in according to schematics Rev. 2 (HV generation is done by 555 timer though)
 
-
 ### to do
 
 - [ ] Time set up (schematics Rev. 3, push buttons added)
