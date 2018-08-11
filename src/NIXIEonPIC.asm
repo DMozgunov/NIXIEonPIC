@@ -855,6 +855,7 @@ LED_debug:
         	
 	btfss PORTA, RA0
 	goto $+3
+	
 	bcf PORTA, RA0
 	
 	goto $+2
