@@ -142,7 +142,7 @@ BT_DEC equ RA6
 BT_SNOOZE equ RA7
  
  
-Debug EQU FALSE       ; A Debugging Flag
+Debug EQU TRUE	        ; A Debugging Flag
 
 cblock 0x20		; (max 80 Bytes)
     Delay1
@@ -223,8 +223,14 @@ ISR       CODE    0x0004
     bcf STATUS,RP0		; select Register Page 0
 
     if ( Debug )
-	bsf PORTA, 0            ; Set high, use to measure total
-    endif                       ; time in Int Service Routine
+	;RA0 is our LED debug output for now
+
+	call LED_debug
+	
+	movlw 'I'
+	call SendByte
+	call EndLine
+    endif 
 
 
     ; Select Interrupt to process
@@ -301,8 +307,6 @@ SECONDS_CHECK
 
 MINUTES_CHECK
 
-    ; add alarm somewhere here
-
     movlw b'01100110'
     subwf MINUTES_BCD, W
 
@@ -341,7 +345,7 @@ ExitISR
     swapf     W_Save,w
 
     if ( Debug )
-    bcf     PORTB, 0            ; Set high, use to measure total
+   
     endif  
 
     retfie
@@ -352,18 +356,21 @@ MAIN_PROGRAM:
 ; PORTS SETUP
 ; ------------------------------------ 
 
+    bcf STATUS,RP0		; select Register Page 0
+    bcf STATUS,RP1		; 
+    
     movlw 7 
-    movwf CMCON             ; CMCON=7 set comperators off 
+    movwf CMCON			; CMCON=7 set comperators off 
 
     clrf PORTA
     clrf PORTB
 
-    bsf STATUS,RP0	    ; select Register Page 1
+    bsf STATUS,RP0		; select Register Page 1
 
     movlw b'00100010' 
-    movwf TRISA             ; portA pins RA1 and RA5 are inputs, all the others are output 
+    movwf TRISA			; portA pins RA1 and RA5 are inputs, all the others are output 
 
-    movlw b'11000010'       ; RB7-RB6(RTC crystal), RB1(RX) and RB0(INT for PWM control) =input, others output 
+    movlw b'11000011'		; RB7-RB6(RTC crystal), RB1(RX) and RB0(INT for PWM control) = input, others output 
     movwf TRISB 
 
 
@@ -372,10 +379,6 @@ MAIN_PROGRAM:
 ; TIMER1 and interrupts SETUP
 ; ------------------------------------ 
 ; 
-; 	
-
-    bsf STATUS,RP0		; select Register Page 1
-
     bsf PIE1, TMR1IE		; TMR1 overflow interrupt
     ;bsf PIE1, RCIE		; USART receiver interrupt
 
@@ -462,6 +465,16 @@ MAIN_PROGRAM:
 
 MAIN_LOOP:  
        
+    if ( Debug )
+	;RA0 is our LED debug output for now
+	
+	movlw 'M'
+	call SendByte
+	call EndLine
+    endif 
+    
+    
+    
     ; SECONDS 
     movf SECONDS_BCD, w			; select seconds data for subroutine
     movwf VAL_FOR_INDICATION		; move it into tmp reg to use inside subroutine
@@ -811,7 +824,16 @@ StillNotSent:			; сначала проверим, передали ли пре�
 
     return
     
-    
+; *******************************************************************
+; * send end of the lin (Win. style )
+; *******************************************************************
+EndLine:
+        movlw  0x0D ; CR 
+        call SendByte 
+        movlw  0x0A ; LF 
+        call SendByte 
+		
+	return     
     ;IfRS232Forward:
     ;movf      	RS232Received,w           
     ;xorlw     	'8'
@@ -822,5 +844,19 @@ StillNotSent:			; сначала проверим, передали ли пре�
 
     ;clrf		RS232Received			; чтобы не было циклических повторов выполнения одной и той же команды
     
+    
+; *******************************************************************
+; * Debug with LED
+; *******************************************************************
+LED_debug:
+        	
+	btfss PORTA, RA0
+	goto $+3
+	bcf PORTA, RA0
+	
+	goto $+2
+	bsf PORTA, RA0
+	
+	return     
     
     END 
