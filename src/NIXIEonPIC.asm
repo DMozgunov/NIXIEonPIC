@@ -94,6 +94,7 @@ Debug EQU TRUE
 	SECONDS_BCD_DEBUG
 	MINUTES_BCD_DEBUG
 	HOURES_BCD_DEBUG
+	DEBUG_COUNTER
 
 	PORTA_TMP		; Used to save PORTA value during indication process. Used for output values
 	PORTB_TMP		; This is tmp reg for PORTB set up during dynamic indication
@@ -301,11 +302,16 @@ MAIN_PROGRAM:
 
 ;===============================================================================
 
-    movlw b'00010111'
+if(Debug)
+    movlw b'10011111'
 
-    movwf SECONDS_BCD_DEBUG	; NIXIE - ZERO seconds
-    movwf MINUTES_BCD_DEBUG	; NIXIE - ZERO minutes
-    movwf HOURES_BCD_DEBUG	; NIXIE - ZERO hours
+    movwf SECONDS_BCD_DEBUG	; 99 seconds
+    movwf MINUTES_BCD_DEBUG	; 99 minutes
+    movwf HOURES_BCD_DEBUG	; 99 hours
+
+    movlw b'00000011'
+    movwf DEBUG_COUNTER		; counting iterations between values change
+endif
 
     ; Buttons debounce
     clrf BUTTONS_COUNT_BT_MODE   ; counters for debounce
@@ -446,7 +452,6 @@ blink_decrement
 	;call SendByte
 	;call EndLine
 
-
 	;call ReceiveByte
 	;movf USART_RECEIVED, W
 
@@ -458,11 +463,11 @@ blink_decrement
 
 	;clrf USART_RECEIVED
 
-	;call BUTTONS
 
-	;call TEST_DEMULTIPLEXING
+	call TUBES_TEST_VALUES			; new values from time to time
+	decf DEBUG_COUNTER, F
 
-	; SECONDS
+	 ; SECONDS
 	movf SECONDS_BCD_DEBUG, w		; select seconds data for subroutine
 	movwf VAL_FOR_INDICATION		; move it into tmp reg to use inside subroutine
 
@@ -470,37 +475,45 @@ blink_decrement
 	bsf PORTB_TMP, _74LS138_A2_on_pB
 	bcf PORTB_TMP, _74LS138_A1_on_pB
 
+	; before indicate anything check if it should be displayed
+
+	btfsc BUTTONS_MODE, SECONDS		; if it should blink
+	btfss BLINK_COUNTER, HIDE_CURRENT	; select to show or to hide
 	call TIME_INDICATION			; show seconds on tubes
 
 	call WASTE_TIME_DYNAMICALLY		; need some time before turning nex tube on
 
 	; MINUTES
-	movf MINUTES_BCD_DEBUG, W		; select minutes data for subroutine
+	movf MINUTES_BCD_DEBUG, W			; select minutes data for subroutine
 	movwf VAL_FOR_INDICATION		; move it into tmp reg to use inside subroutine
 
 	; set demultiplexor
 	bcf PORTB_TMP, _74LS138_A2_on_pB
 	bsf PORTB_TMP, _74LS138_A1_on_pB
 
+	btfsc BUTTONS_MODE, MINUTES		; if it should blink
+	btfss BLINK_COUNTER, HIDE_CURRENT	; select to show or to hide
 	call TIME_INDICATION			; show minutes on tubes
 
 	call WASTE_TIME_DYNAMICALLY		; need some time before turning nex tube on
 
 	; HOURS
-	movf HOURES_BCD_DEBUG, W		; select houres data for subroutine
+	movf HOURES_BCD_DEBUG, W			; select houres data for subroutine
 	movwf VAL_FOR_INDICATION		; move it into tmp reg to use inside subroutine
 
 	; set demultiplexor
-	bcf PORTB_TMP, _74LS138_A2_on_pB
+	bcf PORTB_TMP, _74LS138_A2_on_pB	;
 	bcf PORTB_TMP, _74LS138_A1_on_pB
 
-	call TIME_INDICATION			; show houres on tubes
+	btfsc BUTTONS_MODE, HOURES		; if it should blink
+	btfss BLINK_COUNTER, HIDE_CURRENT	; select to show or to hide
+	call TIME_INDICATION		; show houres on tubes
 
 	call WASTE_TIME_DYNAMICALLY		; need some time before turning next tubes on
 
-    endif
 
-    if (!Debug)
+
+    else
 
 	 ; SECONDS
 	movf SECONDS_BCD, w			; select seconds data for subroutine
@@ -596,19 +609,6 @@ TIME_INDICATION:
 
     subwf VAL_FOR_INDICATION, F		; get correct values for indication
 
-;    if(Debug)
-;
-;	movlw '_'
-;	call SendByte
-;
-;       	movf VAL_FOR_INDICATION, W
-;;	addlw b'00110000'		; 0 in ASKII,
-;
-;	call SendByte			; readable value of current indication value
-;
-;	;call LED_debug
-;    endif
-
     clrf PORTA_TMP
     bsf PORTA_TMP, _74LS138_A0_on_pA	; lower nibble first
 
@@ -619,16 +619,8 @@ showDozensOnSecondPass
 
     iorwf PORTA_TMP, F			;
 
-;    if(Debug)
-;       	movf PORTA_TMP, W
-;	;addlw b'00110000'		; 0 in ASKII,
-;
-;	call SendByte			; readable value of current indication value
-;    endif
-
-    ;btfsc PORTA_TMP, _74LS138_A0_on_pA	; если бит PORTA_TMP выставлен, то организуем вывод единиц. так как вывод производится
-    swapf VAL_FOR_INDICATION, F		; из старшего разряда, то необходимо обменять полубайты
-					;для вывода десятков обмен полубайтов не производим
+    swapf VAL_FOR_INDICATION, F		; due to the fact 155ID1 is connected on RA7 RA6 RA4 RA3
+					; we have to swap nibbles for proper indication (lower served first)
 
     ; get PORTA output bits for 155ID1 (schematics Rev.3)
     ; it is connected on RA3 RA4 RA6 RA7, PORTA mask is 11011000
@@ -641,35 +633,13 @@ showDozensOnSecondPass
 
     rrf INDICATION_TMP1, F		; mask is 00011000
 
-;    if(Debug)
-;       	movf INDICATION_TMP1, W
-;	;addlw b'00110000'		; 0 in ASKII,
-;
-;	call SendByte			; readable value of current indication value
-;    endif
-
     movf VAL_FOR_INDICATION, W
     andlw b'11000000'			;
 
     iorwf INDICATION_TMP1, W		; mask is 11011000
 
-;    if(Debug)
-;       	movf INDICATION_TMP1, W
-;	;addlw b'00110000'		; 0 in ASKII,
-;
-;	call SendByte			; readable value of current indication value
-;    endif
-
     ; Now get output bits fot 155ID1 in PORTA
     iorwf PORTA_TMP, F			;
-
-
-;    if(Debug)
-;       	movf PORTA_TMP, W
-;	;addlw b'00110000'		; 0 in ASKII,
-;
-;	call SendByte			; readable value of current indication value
-;    endif
 
     ; Now get PORTB bits
 
@@ -709,13 +679,6 @@ Set_PORTx_for_DISPLAY
     movf PORTA_TMP, W			; Set PORTA outputs
     movwf PORTA				;
 
-;    if(Debug)
-;       	movf PORTA, W
-;	;addlw b'00110000'		; 0 in ASKII,
-;
-;	call SendByte			; readable value of current indication value
-;    endif
-
     clrf PORTA_TMP			;
 
     btfss PORTA, _74LS138_A0_on_pA	; if set then go to display decades on tube
@@ -725,12 +688,6 @@ Set_PORTx_for_DISPLAY
     goto showDozensOnSecondPass
 
 END_TIME_INDICATION
-
-    if(Debug)
-
-	movlw '_'
-	call SendByte
-    endif
     return
 
 
@@ -765,17 +722,16 @@ BUTTONS:
     movf PORTA_TMP, W
     movwf PORTA
 
-
-    ;; now debounce. we do it every indication loop (1.5 Ms) no to waste time
+    ;; now debounce. we do it every full indication loop no to waste time
 
     ; debounce BT_MODE
     btfss PORTA_IN_TMP, BT_MODE
     goto clear_BT_MODE	    ; clear counter, assume button was never pushed
 
-    if(Debug)
-       	movlw '1'
-	call SendByte
-    endif
+;    if(Debug)
+;       	movlw '1'
+;	call SendByte
+;    endif
 
     incf BUTTONS_COUNT_BT_MODE, W
     movwf BUTTONS_COUNT_BT_MODE
@@ -797,10 +753,10 @@ check_BT_INC
     btfss PORTA_IN_TMP, BT_INC
     goto clear_BT_INC
 
-    if(Debug)
-       	movlw '2'
-	call SendByte
-    endif
+;    if(Debug)
+;       	movlw '2'
+;	call SendByte
+;    endif
 
     incf BUTTONS_COUNT_BT_INC, W
     movwf BUTTONS_COUNT_BT_INC
@@ -822,10 +778,10 @@ check_BT_DEC
     btfss PORTA_IN_TMP, BT_DEC
     goto clear_BT_DEC
 
-    if(Debug)
-       	movlw '3'
-	call SendByte
-    endif
+;    if(Debug)
+;       	movlw '3'
+;	call SendByte
+;    endif
 
     incf BUTTONS_COUNT_BT_DEC, W
     movwf BUTTONS_COUNT_BT_DEC
@@ -847,10 +803,10 @@ check_BT_SNOOZE
     btfss PORTA_IN_TMP, BT_SNOOZE
     goto clear_BT_SNOOZE
 
-    if(Debug)
-       	movlw '4'
-	call SendByte
-    endif
+;    if(Debug)
+;       	movlw '4'
+;	call SendByte
+;    endif
 
     incf BUTTONS_COUNT_BT_SNOOZE, W
     movwf BUTTONS_COUNT_BT_SNOOZE
@@ -1141,7 +1097,7 @@ EndLine:
 ; to DEBUG or not to..
 ;===============================================================================
 
-    if (Debug)
+if (Debug)
 
 TUBES_TEST_VALUES:
     ; generating values to display
@@ -1150,29 +1106,24 @@ TUBES_TEST_VALUES:
     ; 00 00 00
     ; values should change every 3 seconds
 
-    ; NOT FINISHED YET!
-
-    ;NIXIE_ZERO equ b'00000110'
-    ;NIXIE_NINE equ b'00001111'
-
-    movlw b'00000110'	    ; 00
-;    subwf
-    movf  SECONDS_BCD_DEBUG, W
-
+    movlw 0		;
+    xorwf DEBUG_COUNTER, W		;
 
     btfss STATUS, Z
+    return
+
+    movlw NIXIE_ZERO
+
+    subwf SECONDS_BCD_DEBUG, W
+
+    btfss STATUS, Z		; Z = 1 means we have to start from 99 99 99
     goto next_tubes_test_values
 
-    movlw b'10011111'	    ; 99
+    movlw b'10011111'
     movwf SECONDS_BCD_DEBUG
 
     goto set_tubes_test_values
 
-
-    ; check if 3 seconds passed
-
-
-    ; prepare next values to display
 next_tubes_test_values
 
     decf SECONDS_BCD_DEBUG, F
@@ -1185,362 +1136,7 @@ set_tubes_test_values
     movwf   MINUTES_BCD_DEBUG
     movwf   HOURES_BCD_DEBUG
 
-
     return
-
-;
-;TEST_DEMULTIPLEXING:
-; helps to check connection on ports only
-; need smth more advanced
-
-;    ; Seconds
-;
-;
-;    movlw b'00010000'
-;    movwf PORTB
-;
-;
-;    movlw b'00000101'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'00001100'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'00010101'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'00011100'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'01000101'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'01001100'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'01010101'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'01011100'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'10000101'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'10001100'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    ; проверка секунд (десятки)
-;
-;
-;
-;    movlw b'00000001'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'00001000'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'00010001'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'00011000'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'01000001'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'01001000'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'01010001'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'01011000'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'10000001'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'10001000'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;
-;
-;    ; check minutes (least significant)
-;
-;    movlw b'00100000'
-;    movwf PORTB
-;
-;
-;    movlw b'00000101'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'00001100'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'00010101'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'00011100'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'01000101'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'01001100'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'01010101'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'01011100'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'10000101'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'10001100'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    ; check minutes (most significant)
-;
-;    movlw b'00000001'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'00001000'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'00010001'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'00011000'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'01000001'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'01001000'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'01010001'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'01011000'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'10000001'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'10001000'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;
-;
-;    ; check minutes (least significant)
-;
-;    movlw b'00000000'
-;    movwf PORTB
-;
-;
-;    movlw b'00000101'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'00001100'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'00010101'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'00011100'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'01000101'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'01001100'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'01010101'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'01011100'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'10000101'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'10001100'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    ; check minutes (most significant)
-;
-;    movlw b'00000001'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'00001000'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'00010001'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'00011000'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'01000001'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'01001000'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'01010001'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'01011000'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'10000001'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'10001000'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;
-;    ; dots/ additional lamps
-;
-;    movlw b'00110000'
-;    movwf PORTB
-;
-;    movlw b'00000000'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    movlw b'00000100'
-;    movwf PORTA
-;
-;    call BIIG_DELAY_for_DEBUG
-;
-;    return
 
 
 BIIG_DELAY_for_DEBUG:
@@ -1565,7 +1161,7 @@ LED_debug:
 
     return
 
-    endif
+endif
 
 
 
