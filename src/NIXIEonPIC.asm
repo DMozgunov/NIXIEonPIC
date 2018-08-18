@@ -301,6 +301,7 @@ MAIN_PROGRAM:
 
 ;===============================================================================
 
+    movlw b'00010111'
 
     movwf SECONDS_BCD_DEBUG	; NIXIE - ZERO seconds
     movwf MINUTES_BCD_DEBUG	; NIXIE - ZERO minutes
@@ -499,7 +500,7 @@ blink_decrement
 
     endif
 
-    if (0)
+    if (!Debug)
 
 	 ; SECONDS
 	movf SECONDS_BCD, w			; select seconds data for subroutine
@@ -591,18 +592,22 @@ dl_loop
 ;===============================================================================
 TIME_INDICATION:
 
-    if(Debug)
-       	movf VAL_FOR_INDICATION, W
-	addlw 30
-
-	call SendByte
-
-	;call LED_debug
-    endif
-
     movlw NIXIE_ZERO
 
     subwf VAL_FOR_INDICATION, F		; get correct values for indication
+
+;    if(Debug)
+;
+;	movlw '_'
+;	call SendByte
+;
+;       	movf VAL_FOR_INDICATION, W
+;;	addlw b'00110000'		; 0 in ASKII,
+;
+;	call SendByte			; readable value of current indication value
+;
+;	;call LED_debug
+;    endif
 
     clrf PORTA_TMP
     bsf PORTA_TMP, _74LS138_A0_on_pA	; lower nibble first
@@ -611,7 +616,15 @@ showDozensOnSecondPass
 
     movf PORTA, W			; preserve some PORTA bits from changing
     andlw b'00100011'			; RA0 RA1 RA5
+
     iorwf PORTA_TMP, F			;
+
+;    if(Debug)
+;       	movf PORTA_TMP, W
+;	;addlw b'00110000'		; 0 in ASKII,
+;
+;	call SendByte			; readable value of current indication value
+;    endif
 
     ;btfsc PORTA_TMP, _74LS138_A0_on_pA	; если бит PORTA_TMP выставлен, то организуем вывод единиц. так как вывод производится
     swapf VAL_FOR_INDICATION, F		; из старшего разряда, то необходимо обменять полубайты
@@ -623,16 +636,40 @@ showDozensOnSecondPass
     andlw b'00110000'			; need to get this bits from upper nibble and rotate tem left
 
     movwf INDICATION_TMP1
+
+    bcf STATUS, C			; it has 1 somehow. must be cleared manually
+
     rrf INDICATION_TMP1, F		; mask is 00011000
+
+;    if(Debug)
+;       	movf INDICATION_TMP1, W
+;	;addlw b'00110000'		; 0 in ASKII,
+;
+;	call SendByte			; readable value of current indication value
+;    endif
 
     movf VAL_FOR_INDICATION, W
     andlw b'11000000'			;
 
     iorwf INDICATION_TMP1, W		; mask is 11011000
 
+;    if(Debug)
+;       	movf INDICATION_TMP1, W
+;	;addlw b'00110000'		; 0 in ASKII,
+;
+;	call SendByte			; readable value of current indication value
+;    endif
+
     ; Now get output bits fot 155ID1 in PORTA
     iorwf PORTA_TMP, F			;
 
+
+;    if(Debug)
+;       	movf PORTA_TMP, W
+;	;addlw b'00110000'		; 0 in ASKII,
+;
+;	call SendByte			; readable value of current indication value
+;    endif
 
     ; Now get PORTB bits
 
@@ -672,6 +709,13 @@ Set_PORTx_for_DISPLAY
     movf PORTA_TMP, W			; Set PORTA outputs
     movwf PORTA				;
 
+;    if(Debug)
+;       	movf PORTA, W
+;	;addlw b'00110000'		; 0 in ASKII,
+;
+;	call SendByte			; readable value of current indication value
+;    endif
+
     clrf PORTA_TMP			;
 
     btfss PORTA, _74LS138_A0_on_pA	; if set then go to display decades on tube
@@ -681,6 +725,12 @@ Set_PORTx_for_DISPLAY
     goto showDozensOnSecondPass
 
 END_TIME_INDICATION
+
+    if(Debug)
+
+	movlw '_'
+	call SendByte
+    endif
     return
 
 
@@ -1055,11 +1105,12 @@ NothingReceived
 
 SendByte:
     ; Byte to send is in W
-    bsf	STATUS, RP0		;
+    bsf	    STATUS, RP0		;
 
 StillNotSent			; check weather previous byte was sent
     btfss   TXSTA,TRMT		;
     goto    StillNotSent
+
     bcf	    STATUS,RP0
 
     movwf   TXREG		; send new byte
@@ -1098,6 +1149,8 @@ TUBES_TEST_VALUES:
     ; to
     ; 00 00 00
     ; values should change every 3 seconds
+
+    ; NOT FINISHED YET!
 
     ;NIXIE_ZERO equ b'00000110'
     ;NIXIE_NINE equ b'00001111'
